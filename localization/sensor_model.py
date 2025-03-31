@@ -8,6 +8,7 @@ from tf_transformations import euler_from_quaternion
 from nav_msgs.msg import OccupancyGrid
 
 import sys
+import sympy as sy
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -31,11 +32,13 @@ class SensorModel:
 
         ####################################
         # Adjust these parameters
-        self.alpha_hit = 0
-        self.alpha_short = 0
-        self.alpha_max = 0
-        self.alpha_rand = 0
-        self.sigma_hit = 0
+        self.alpha_hit = 0.74
+        self.alpha_short = 0.07
+        self.alpha_max = 0.07
+        self.alpha_rand = 0.12
+        self.sigma_hit = 8.0
+        
+        self.eps = 0.01
 
         # Your sensor table will be a `table_width` x `table_width` np array:
         self.table_width = 201
@@ -55,7 +58,7 @@ class SensorModel:
             self.num_beams_per_particle,
             self.scan_field_of_view,
             0,  # This is not the simulator, don't add noise
-            0.01,  # This is used as an epsilon
+            self.eps,  # This is used as an epsilon
             self.scan_theta_discretization)
 
         # Subscribe to the map
@@ -86,8 +89,47 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
+        
+        for ground_truth in range(self.table_width):
+            hit_sum = sum(self.p_hit(measurement, ground_truth) for measurement in range(self.table_width))
+            for measured in range(self.table_width):
+                self.sensor_model_table[ground_truth][measured] = self.alpha_hit * self.p_hit(measured, ground_truth, hit_sum) + \
+                                                                    self.alpha_short * self.p_short(measured, ground_truth) + \
+                                                                    self.alpha_max * self.p_max(measured, ground_truth) + \
+                                                                    self.alpha_rand * self.p_rand(measured, ground_truth)
+        # Normalize columns
+        for measured in range(self.table_width):
+            self.sensor_model_table[:, measured] /= np.linalg.norm(self.sensor_model_table[:, measured])
 
-        raise NotImplementedError
+    def p_hit(self, z, d, inverse_eta = 1):
+        """
+        Implements the p_hit function from the handout.
+        args:
+            z: a number/vector reperesenting measured distances
+            d: a number representing ground truth distance
+            inverse_eta: 1/normailization constant 
+        returns:
+            probability: the hit probability of measuring z given d
+        """
+        if 0 <= z <= self.table_width - 1:
+            numerator = np.exp((-(z-d)**2)/2*self.sigma_hit**2)
+            return numerator/inverse_eta     
+        return 0.
+        
+    def p_short(self, z, d):
+        if 0 <= z <= d and d != 0:
+            return (2 / d) * (1 - z/d)
+        return 0.
+            
+    def p_max(self, z, d):
+        if (self.table_width - 1 - self.eps <= z) and (self.table_width - 1 >= z):
+            return 1/self.eps
+        return 0.
+
+    def p_rand(self, z, d):
+        if 0 <= z <= self.table_width - 1:
+            return 1/(self.table_width - 1)
+        return 0.
 
     def evaluate(self, particles, observation):
         """
@@ -114,15 +156,19 @@ class SensorModel:
             return
 
         ####################################
-        # TODO
         # Evaluate the sensor model here!
-        #
-        # You will probably want to use this function
-        # to perform ray tracing from all the particles.
         # This produces a matrix of size N x num_beams_per_particle 
 
         scans = self.scan_sim.scan(particles)
-
+        scans = (scans / (self.resolution * self.lidar_scale_to_map_scale)).astype(int) # Meters to pixels
+        observation = (observation / (self.resolution * self.lidar_scale_to_map_scale)).astype(int)
+        probabilities = []
+        for scan in scans:
+            probability = np.prod(self.sensor_model_table[observation][scan])
+            probabilities.append(probability)
+            
+        return np.array(probabilities)
+        
         ####################################
 
     def map_callback(self, map_msg):

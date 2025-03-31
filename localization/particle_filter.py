@@ -15,7 +15,7 @@ class ParticleFilter(Node):
     def __init__(self):
         super().__init__("particle_filter")
 
-        self.declare_parameter('particle_filter_frame', "default")
+        self.declare_parameter('deterministic', "default")
         self.particle_filter_frame = self.get_parameter('particle_filter_frame').get_parameter_value().string_value
 
         #  *Important Note #1:* It is critical for your particle
