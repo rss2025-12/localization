@@ -6,11 +6,9 @@ class MotionModel:
         ####################################
         # Precomputation here
         
-        node.declare_parameter('deterministic', False)
-        node.declare_parameter('noise_std', 1.0)
-
-        self.noise_std = node.get_parameter('noise_std').get_parameter_value().double_value
         self.deterministic = node.get_parameter('deterministic').get_parameter_value().bool_value
+        self.sigma = 0.5
+        self.sigma_theta = 0.1
 
         ####################################
 
@@ -52,7 +50,10 @@ class MotionModel:
         def T_odom():
             if self.deterministic:
                 return vector_to_T(*odometry)
-            return vector_to_T(*np.random.normal(odometry, self.noise_std)) 
+            odometry[0] = np.random.normal(odometry[0], self.sigma)
+            odometry[1] = np.random.normal(odometry[1], self.sigma)
+            odometry[2] = np.random.normal(odometry[2], self.sigma_theta)
+            return vector_to_T(*odometry) 
 
         updated_particles = np.array([
             T_to_vector(vector_to_T(*particle) @ T_odom()) for particle in particles

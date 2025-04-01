@@ -16,6 +16,7 @@ np.set_printoptions(threshold=sys.maxsize)
 class SensorModel:
 
     def __init__(self, node):
+        self.node = node
         node.declare_parameter('map_topic', "default")
         node.declare_parameter('num_beams_per_particle', 1)
         node.declare_parameter('scan_theta_discretization', 1.0)
@@ -158,13 +159,14 @@ class SensorModel:
         ####################################
         # Evaluate the sensor model here!
         # This produces a matrix of size N x num_beams_per_particle 
+        
 
         scans = self.scan_sim.scan(particles)
-        scans = (scans / (self.resolution * self.lidar_scale_to_map_scale)).astype(int) # Meters to pixels
-        observation = (observation / (self.resolution * self.lidar_scale_to_map_scale)).astype(int)
+        scans = np.clip(((scans / (self.resolution * self.lidar_scale_to_map_scale)).astype(int)), 0, self.table_width-1) # Meters to pixels
+        observation = np.clip(((observation / (self.resolution * self.lidar_scale_to_map_scale)).astype(int)), 0, self.table_width-1)
         probabilities = []
         for scan in scans:
-            probability = np.prod(self.sensor_model_table[observation][scan])
+            probability = np.prod(self.sensor_model_table[observation, scan])
             probabilities.append(probability)
             
         return np.array(probabilities)
