@@ -75,6 +75,8 @@ class ParticleFilter(Node):
         self.sensor_model = SensorModel(self)
         
         self.particle_lock = Lock()
+        self.threshold = 1e-5
+        self.particles_updated = False
         self.get_logger().info("=============+READY+=============")
     
 
@@ -131,7 +133,7 @@ class ParticleFilter(Node):
         self.particle_lock.acquire()
         self.particle_weights = self.sensor_model.evaluate(self.particles, downsampled_scan)
         self.particle_lock.release()
-
+        self.particles_updated = True
         self.update_pose()
 
 
@@ -165,7 +167,7 @@ class ParticleFilter(Node):
         returns:
             None
         """
-        # self.get_logger().info(f'self.particle weights is {self.particle_weights}')
+        self.get_logger().info(f'self.particle weights is {self.particle_weights}')
         particles = self.particles*self.particle_weights[:,np.newaxis]
         
         # take circular mean of theta measurements:
@@ -194,6 +196,31 @@ class ParticleFilter(Node):
         )
 
         self.odom_pub.publish(odom_msg)
+
+        
+
+        # delete particles with too few points
+        if self.particles_updated:
+            mask = self.particle_weights > self.threshold
+            # self.get_logger().info(f'the particles before are {self.particles}')
+            self.particles = self.particles[mask.reshape(-1)]
+            # self.get_logger().info(f'the particles after are {self.particles}')
+            self.get_logger().info(f'the particles weights before are {self.particle_weights}')
+            self.particle_weights = self.particle_weights[mask.reshape(-1)]
+            self.get_logger().info(f'the particles weights after are {self.particle_weights}')
+            self.particle_weights /= np.sum(self.particle_weights)
+            
+            # x = array([[1,2],[2,3],[3,4]])
+            # mask = [False,False,True]
+            # x[~np.array(mask)]
+            # # array([[1, 2],
+            # #        [2, 3]])
+        
+            # resample particles
+            # should we be resampling before or after deletion?
+            particle_indices = np.arange(len(self.particle_weights))
+            resampled = self.particles[np.random.choice(particle_indices, size=self.particle_count - len(self.particle_weights), p=self.particle_weights.reshape(-1)), :]
+            self.particles = np.vstack((self.particles, resampled))
 
         return
 
