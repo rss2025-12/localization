@@ -100,7 +100,9 @@ class SensorModel:
                                                                     self.alpha_rand * self.p_rand(measured, ground_truth)
         # Normalize columns
         for measured in range(self.table_width):
-            self.sensor_model_table[:, measured] /= np.linalg.norm(self.sensor_model_table[:, measured])
+            # self.sensor_model_table[:, measured] /= np.linalg.norm(self.sensor_model_table[:, measured])
+            self.sensor_model_table[:, measured] = self.sensor_model_table[:, measured]/np.sum(self.sensor_model_table[:, measured])
+            # self.node.get_logger().info(f'the sum of prob column is {np.sum(self.sensor_model_table[:, measured])}')
 
     def p_hit(self, z, d, inverse_eta = 1):
         """
@@ -159,7 +161,6 @@ class SensorModel:
         ####################################
         # Evaluate the sensor model here!
         # This produces a matrix of size N x num_beams_per_particle 
-        
 
         scans = self.scan_sim.scan(particles)
         scans = np.clip(((scans / (self.resolution * self.lidar_scale_to_map_scale)).astype(int)), 0, self.table_width-1) # Meters to pixels
@@ -202,4 +203,4 @@ class SensorModel:
         # Make the map set
         self.map_set = True
 
-        print("Map initialized")
+        self.node.get_logger().info("got the map")
