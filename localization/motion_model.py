@@ -7,9 +7,9 @@ class MotionModel:
         # Precomputation here
         
         self.deterministic = node.get_parameter('deterministic').get_parameter_value().bool_value
-        self.deterministic = True
+        self.deterministic = False
         self.sigma = 0.1
-        self.sigma_theta = 0.1
+        self.sigma_theta = 0.05
 
         ####################################
 
@@ -48,7 +48,6 @@ class MotionModel:
             y = T[1, 2]
             return np.array([x, y, theta])
     
-
         # def T_odom():
         #     if not self.deterministic:
         #         odometry[0] = np.random.normal(odometry[0], self.sigma)

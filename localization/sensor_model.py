@@ -92,17 +92,22 @@ class SensorModel:
         """
         
         for ground_truth in range(self.table_width):
-            hit_sum = sum(self.p_hit(measurement, ground_truth) for measurement in range(self.table_width))
+            norm = sum(self.p_hit(measurement, ground_truth, inverse_eta=1.0) for measurement in range(self.table_width))
+
             for measured in range(self.table_width):
-                self.sensor_model_table[ground_truth][measured] = self.alpha_hit * self.p_hit(measured, ground_truth, hit_sum) + \
-                                                                    self.alpha_short * self.p_short(measured, ground_truth) + \
-                                                                    self.alpha_max * self.p_max(measured, ground_truth) + \
-                                                                    self.alpha_rand * self.p_rand(measured, ground_truth)
+                prob = 0.0
+                prob += self.alpha_hit * self.p_hit(measured, ground_truth, inverse_eta=norm)
+                prob += self.alpha_short * self.p_short(measured, ground_truth)
+                prob += self.alpha_max * self.p_max(measured, ground_truth)
+                prob += self.alpha_rand * self.p_rand(measured, ground_truth)
+ 
+                self.sensor_model_table[ground_truth][measured] = prob
+        
         # Normalize columns
-        for measured in range(self.table_width):
-            # self.sensor_model_table[:, measured] /= np.linalg.norm(self.sensor_model_table[:, measured])
-            self.sensor_model_table[:, measured] = self.sensor_model_table[:, measured]/np.sum(self.sensor_model_table[:, measured])
-            # self.node.get_logger().info(f'the sum of prob column is {np.sum(self.sensor_model_table[:, measured])}')
+        self.sensor_model_table = self.sensor_model_table / np.sum(self.sensor_model_table, axis=0, keepdims=True)
+        # for measured in range(self.table_width):
+        #     # self.sensor_model_table[:, measured] /= np.linalg.norm(self.sensor_model_table[:, measured])
+        #     self.sensor_model_table[:, measured] = self.sensor_model_table[:, measured] / np.sum(self.sensor_model_table[:, measured])
 
     def p_hit(self, z, d, inverse_eta = 1):
         """
@@ -115,24 +120,24 @@ class SensorModel:
             probability: the hit probability of measuring z given d
         """
         if 0 <= z <= self.table_width - 1:
-            numerator = np.exp((-(z-d)**2)/2*self.sigma_hit**2)
-            return numerator/inverse_eta     
-        return 0.
+            numerator = np.exp((-(z - d)**2) / (2 * self.sigma_hit**2))
+            return numerator / inverse_eta     
+        return 0.0
         
     def p_short(self, z, d):
         if 0 <= z <= d and d != 0:
             return (2 / d) * (1 - z/d)
-        return 0.
+        return 0.0
             
     def p_max(self, z, d):
         if (self.table_width - 1 - self.eps <= z) and (self.table_width - 1 >= z):
             return 1/self.eps
-        return 0.
+        return 0.0
 
     def p_rand(self, z, d):
         if 0 <= z <= self.table_width - 1:
             return 1/(self.table_width - 1)
-        return 0.
+        return 0.0
 
     def evaluate(self, particles, observation):
         """
@@ -162,9 +167,11 @@ class SensorModel:
         # Evaluate the sensor model here!
         # This produces a matrix of size N x num_beams_per_particle 
 
-        scans = self.scan_sim.scan(particles)
-        scans = np.clip(((scans / (self.resolution * self.lidar_scale_to_map_scale)).astype(int)), 0, self.table_width-1) # Meters to pixels
+        ### Get ground truth and measured
         observation = np.clip(((observation / (self.resolution * self.lidar_scale_to_map_scale)).astype(int)), 0, self.table_width-1)
+        scans = self.scan_sim.scan(particles)
+        scans = np.clip(((scans / (self.resolution * self.lidar_scale_to_map_scale)).astype(int)), 0, self.table_width-1)
+
         probabilities = []
         for scan in scans:
             probability = np.prod(self.sensor_model_table[observation, scan])
@@ -203,4 +210,4 @@ class SensorModel:
         # Make the map set
         self.map_set = True
 
-        self.node.get_logger().info("got the map")
+        self.node.get_logger().info("Got the map")
