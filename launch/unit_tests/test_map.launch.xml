@@ -2,7 +2,6 @@
     <!-- Listen to messages from joysicks -->
     <node pkg="joy" name="joy_node" exec="joy_node"/>
 
-
     <!-- Launches map from map folder and map server-->
     <arg name="map" default="$(find-pkg-share localization)/test_map/test_map.yaml"/>
     <node name="map_server" pkg="nav2_map_server" exec="map_server" output="screen">
