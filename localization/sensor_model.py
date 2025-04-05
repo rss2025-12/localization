@@ -1,6 +1,6 @@
 import numpy as np
 from scan_simulator_2d import PyScanSimulator2D
-# Try to change to just `from scan_simulator_2d import PyScanSimulator2D` 
+# Try to change to just `from scan_simulator_2d import PyScanSimulator2D`
 # if any error re: scan_simulator_2d occurs
 
 from tf_transformations import euler_from_quaternion
@@ -38,7 +38,7 @@ class SensorModel:
         self.alpha_max = 0.07
         self.alpha_rand = 0.12
         self.sigma_hit = 8.0
-        
+
         self.eps = 0.01
 
         # Your sensor table will be a `table_width` x `table_width` np array:
@@ -75,7 +75,7 @@ class SensorModel:
         """
         Generate and store a table which represents the sensor model.
 
-        For each discrete computed range value, this provides the probability of 
+        For each discrete computed range value, this provides the probability of
         measuring any (discrete) range. This table is indexed by the sensor model
         at runtime by discretizing the measurements and computed ranges from
         RangeLibc.
@@ -90,7 +90,7 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
-        
+
         for ground_truth in range(self.table_width):
             norm = sum(self.p_hit(measurement, ground_truth, inverse_eta=1.0) for measurement in range(self.table_width))
 
@@ -100,14 +100,11 @@ class SensorModel:
                 prob += self.alpha_short * self.p_short(measured, ground_truth)
                 prob += self.alpha_max * self.p_max(measured, ground_truth)
                 prob += self.alpha_rand * self.p_rand(measured, ground_truth)
- 
+
                 self.sensor_model_table[ground_truth][measured] = prob
-        
+
         # Normalize columns
         self.sensor_model_table = self.sensor_model_table / np.sum(self.sensor_model_table, axis=0, keepdims=True)
-        # for measured in range(self.table_width):
-        #     # self.sensor_model_table[:, measured] /= np.linalg.norm(self.sensor_model_table[:, measured])
-        #     self.sensor_model_table[:, measured] = self.sensor_model_table[:, measured] / np.sum(self.sensor_model_table[:, measured])
 
     def p_hit(self, z, d, inverse_eta = 1):
         """
@@ -115,20 +112,20 @@ class SensorModel:
         args:
             z: a number/vector reperesenting measured distances
             d: a number representing ground truth distance
-            inverse_eta: 1/normailization constant 
+            inverse_eta: 1/normailization constant
         returns:
             probability: the hit probability of measuring z given d
         """
         if 0 <= z <= self.table_width - 1:
             numerator = np.exp((-(z - d)**2) / (2 * self.sigma_hit**2))
-            return numerator / inverse_eta     
+            return numerator / inverse_eta
         return 0.0
-        
+
     def p_short(self, z, d):
         if 0 <= z <= d and d != 0:
             return (2 / d) * (1 - z/d)
         return 0.0
-            
+
     def p_max(self, z, d):
         if (self.table_width - 1 - self.eps <= z) and (self.table_width - 1 >= z):
             return 1/self.eps
@@ -165,9 +162,9 @@ class SensorModel:
 
         ####################################
         # Evaluate the sensor model here!
-        # This produces a matrix of size N x num_beams_per_particle 
+        # This produces a matrix of size N x num_beams_per_particle
 
-        ### Get ground truth and measured
+        ### Get ground truth and measured ###
         observation = np.clip(((observation / (self.resolution * self.lidar_scale_to_map_scale)).astype(int)), 0, self.table_width-1)
         scans = self.scan_sim.scan(particles)
         scans = np.clip(((scans / (self.resolution * self.lidar_scale_to_map_scale)).astype(int)), 0, self.table_width-1)
@@ -176,9 +173,9 @@ class SensorModel:
         for scan in scans:
             probability = np.prod(self.sensor_model_table[observation, scan])
             probabilities.append(probability)
-            
+
         return np.array(probabilities)
-        
+
         ####################################
 
     def map_callback(self, map_msg):
@@ -209,5 +206,4 @@ class SensorModel:
 
         # Make the map set
         self.map_set = True
-
         self.node.get_logger().info("Got the map")
