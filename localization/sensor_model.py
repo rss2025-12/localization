@@ -3,13 +3,10 @@ from scan_simulator_2d import PyScanSimulator2D
 # Try to change to just `from scan_simulator_2d import PyScanSimulator2D`
 # if any error re: scan_simulator_2d occurs
 
+from nav_msgs.msg import OccupancyGrid
 from tf_transformations import euler_from_quaternion
 
-from nav_msgs.msg import OccupancyGrid
-
 import sys
-import sympy as sy
-
 np.set_printoptions(threshold=sys.maxsize)
 
 
@@ -206,4 +203,4 @@ class SensorModel:
 
         # Make the map set
         self.map_set = True
-        self.node.get_logger().info("Got the map")
+        self.node.get_logger().info("Map recieved")

@@ -1,17 +1,16 @@
 from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
-from threading import Lock
 
+from rclpy.node import Node
+import rclpy
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
 from sensor_msgs.msg import LaserScan
 from tf_transformations import euler_from_quaternion, quaternion_from_euler
+assert rclpy
 
-from rclpy.node import Node
-import rclpy
 import numpy as np
 
-assert rclpy
 
 class ParticleFilter(Node):
 
@@ -75,6 +74,7 @@ class ParticleFilter(Node):
         self.motion_model = MotionModel(self)
         self.sensor_model = SensorModel(self)
 
+        self.last_odom_time = None
         self.initial_pose_set = False
         self.get_logger().info("=============+READY+=============")
 
@@ -93,8 +93,6 @@ class ParticleFilter(Node):
         """
         Given a initial pose, generates some particles around the pose
         """
-        self.get_logger().info('Initial pose recieved.')
-
         x = pose.pose.pose.position.x
         y = pose.pose.pose.position.y
 
@@ -102,8 +100,9 @@ class ParticleFilter(Node):
         qy = pose.pose.pose.orientation.y
         qz = pose.pose.pose.orientation.z
         qw = pose.pose.pose.orientation.w
-
         _, _, theta = euler_from_quaternion([qx, qy, qz, qw])
+
+        self.get_logger().info(f'Initial pose {x, y, theta} recieved')
 
         sigma = 0.5
         sigma_theta = 0.1
@@ -116,18 +115,27 @@ class ParticleFilter(Node):
         self.particle_weights = np.full(self.particle_count, 1 / self.particle_count)
 
         self.initial_pose_set = True
-        self.get_logger().info('Particles initialized.')
+        self.get_logger().info('Particles initialized')
 
 
     def odom_callback(self, odom):
         if not self.initial_pose_set:
             return
 
+        current_timestamp = odom.header.stamp.sec + odom.header.stamp.nanosec * 1e-9
+
+        if self.last_odom_time is None:
+            self.last_odom_time = current_timestamp
+            current_timestamp += 1/50 # Average frequency of /odom
+
+        dt = current_timestamp - self.last_odom_time
+        self.last_odom_time = current_timestamp
+
         x = odom.twist.twist.linear.x
         y = odom.twist.twist.linear.y
         theta = odom.twist.twist.angular.z
 
-        odometry = np.array([x, y, theta])
+        odometry = np.array([x * dt, y * dt, theta * dt])
 
         self.particles = self.motion_model.evaluate(self.particles, odometry)
         self.update_pose()

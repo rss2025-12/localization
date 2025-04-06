@@ -57,10 +57,13 @@ class MotionModel:
 
         sampled_odometry = sample_odometry(odometry, len(particles))
 
-        updated_particles = np.array([
-            T_to_vector(vector_to_T(*particle) @ vector_to_T(*odom_noise))
-            for particle, odom_noise in zip(particles, sampled_odometry)
-        ])
+        updated_particles = []
+        for particle, odom_noise in zip(particles, sampled_odometry):
+            T_particle = vector_to_T(*particle)
+            T_odom = vector_to_T(*odom_noise)
+            T_new = T_particle @ T_odom
+            updated_particles.append(T_to_vector(T_new))
+        updated_particles = np.array(updated_particles)
 
         return updated_particles
         ####################################
