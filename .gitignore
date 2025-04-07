@@ -1,9 +1,10 @@
 log.npz
 .ipynb_checkpoints/
-build
+build 
 *.so
 scan_simulator_2d.cpp
 *.sw*
 *.pyc
 .vscode/
 CATKIN_IGNORE
+rosbags/

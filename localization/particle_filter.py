@@ -275,15 +275,9 @@ class ParticleFilter(Node):
         particle_weights = self.particle_weights.copy()
         particle_weights = particle_weights / np.sum(particle_weights)
 
-        # current_timestamp = laser.header.stamp.sec + laser.header.stamp.nanosec * 1e-9
-
-        # if not self.initial_pose_set or (self.last_laser_time is not None and current_timestamp < self.last_laser_time + 1/self.sensor_freq):
-        #     return
-        # self.last_laser_time = current_timestamp
-
-        # Resample only if Neff is low
+        ### Resample only if Neff is low ###
         neff = 1.0 / np.sum(particle_weights**2)
-        if neff > 0.6 * self.particle_count: # Between 0.5 - 0.7
+        if neff > 0.5 * self.particle_count: # Between 0.5 - 0.7
             return particles, particle_weights
 
         ### Low Variance Resampling ###
@@ -300,26 +294,12 @@ class ParticleFilter(Node):
             indices[j] = i
 
         resampled_particles = particles[indices]
-        resampled_weights = particle_weights[indices]
-        resampled_weights = resampled_weights / np.sum(resampled_weights)
+        resampled_weights = np.ones(N) / N
+
+        # resampled_weights = particle_weights[indices]
+        # resampled_weights = resampled_weights / np.sum(resampled_weights)
 
         return resampled_particles, resampled_weights
-
-        # ### Resampling ###
-        # particle_indices = np.arange(len(particle_weights))
-        # choice_indices = np.random.choice(particle_indices, size=self.particle_count, p=particle_weights.reshape(-1), replace=True)
-        # resampled_particles = particles[choice_indices, :]
-        # # resampled_weights = particle_weights[choice_indices] / sum(particle_weights[choice_indices])
-        # resampled_weights = particle_weights[choice_indices]
-        # for i in range(len(resampled_particles)):
-        #     p = particles[i]
-        #     x,y = p[:2]
-        #     if self.is_free(x,y) == 0:
-        #         resampled_weights[i] = 0
-        # resampled_weights = resampled_weights / sum(resampled_weights)
-
-        # return (resampled_particles, resampled_weights)
-
 
 def main(args=None):
     rclpy.init(args=args)

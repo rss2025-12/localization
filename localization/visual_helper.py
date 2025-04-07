@@ -70,6 +70,22 @@ class VisualHelper(Node):
         new_scan.header.stamp = self.get_clock().now().to_msg()
         new_scan.header.frame_id = 'scan_overlay'
 
+        num_points = 100
+        total_points = len(scan_msg.ranges)
+        step_size = max(1, total_points // num_points)
+
+        downsampled_ranges = []
+        downsampled_angles = []
+        for i in range(0, total_points, step_size):
+            angle = scan_msg.angle_min + i * scan_msg.angle_increment
+            downsampled_ranges.append(scan_msg.ranges[i])
+            downsampled_angles.append(angle)
+
+        new_scan.ranges = downsampled_ranges
+        new_scan.angle_min = downsampled_angles[0] if downsampled_angles else scan_msg.angle_min
+        new_scan.angle_max = downsampled_angles[-1] if downsampled_angles else scan_msg.angle_max
+        new_scan.angle_increment = (downsampled_angles[-1] - downsampled_angles[0]) / len(downsampled_angles) if len(downsampled_angles) > 1 else scan_msg.angle_increment
+
         self.scan_pub.publish(new_scan)
 
 def main(args=None):
