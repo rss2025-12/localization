@@ -3,10 +3,11 @@ from localization.motion_model import MotionModel
 
 from rclpy.node import Node
 import rclpy
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
+from nav_msgs.msg import Odometry, Path
+from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion, PoseStamped, TransformStamped
 from sensor_msgs.msg import LaserScan
 from tf_transformations import euler_from_quaternion, quaternion_from_euler
+from tf2_ros import TransformBroadcaster
 assert rclpy
 
 import numpy as np
@@ -18,6 +19,8 @@ class ParticleFilter(Node):
         super().__init__("particle_filter")
 
         self.declare_parameter('deterministic', False)
+        self.declare_parameter('odom_invert', False)
+        self.declare_parameter('sensor_model_frequency', 10.0)
         self.declare_parameter('particle_filter_frame', "/base_link")
         self.particle_filter_frame = self.get_parameter('particle_filter_frame').get_parameter_value().string_value
 
@@ -35,6 +38,10 @@ class ParticleFilter(Node):
 
         scan_topic = self.get_parameter("scan_topic").get_parameter_value().string_value
         odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value
+
+
+        self.odom_invert = self.get_parameter("odom_invert").get_parameter_value().bool_value
+        self.sensor_freq = self.get_parameter("sensor_model_frequency").get_parameter_value().double_value
 
         self.particle_count = self.get_parameter("particle_count").get_parameter_value().integer_value
 
@@ -66,15 +73,26 @@ class ParticleFilter(Node):
         self.odom_pub = self.create_publisher(Odometry, "/pf/pose/odom", 1)
 
         # Initialize the models
-        self.particle_pub= self.create_publisher(PoseArray, "/particles", 1)
+        self.particle_pub = self.create_publisher(PoseArray, "/debug_particles", 1)
+        self.visualize_particles = True
 
-        # self.particles = np.zeros((self.particle_count, 3))
-        # self.particle_weights = np.ones(self.particle_count)
+        # Slime path
+        self.path_pub = self.create_publisher(Path, "/odom_path", 1)
+        self.path = Path()
+        self.path.header.stamp = self.get_clock().now().to_msg()
+        self.path.header.frame_id = "map"
+        self.visualize_path = False
+
+        # Visualize lidar data
+        self.tf_broadcaster = TransformBroadcaster(self)
+        self.visualize_laser = True
 
         self.motion_model = MotionModel(self)
         self.sensor_model = SensorModel(self)
 
         self.last_odom_time = None
+        self.last_laser_time = None
+        self.last_path_time = None
         self.initial_pose_set = False
         self.get_logger().info("=============+READY+=============")
 
@@ -135,7 +153,7 @@ class ParticleFilter(Node):
         y = odom.twist.twist.linear.y
         theta = odom.twist.twist.angular.z
 
-        odometry = np.array([x * dt, y * dt, theta * dt])
+        odometry = np.array([x * dt, y * dt, theta * dt]) if not self.odom_invert else -np.array([x * dt, y * dt, theta * dt])
 
         self.particles = self.motion_model.evaluate(self.particles, odometry)
         self.update_pose()
@@ -146,8 +164,12 @@ class ParticleFilter(Node):
         Uses scan data to generate weights for the particles.
         Returns nothing.
         """
-        if not self.initial_pose_set:
+
+        current_timestamp = laser.header.stamp.sec + laser.header.stamp.nanosec * 1e-9
+
+        if not self.initial_pose_set or (self.last_laser_time is not None and current_timestamp < self.last_laser_time + 1/self.sensor_freq):
             return
+        self.last_laser_time = current_timestamp
 
         ### Downsizing laserscan to fit sensor_model scan ###
         desired_sample_num = self.sensor_model.num_beams_per_particle
@@ -204,23 +226,50 @@ class ParticleFilter(Node):
 
         self.odom_pub.publish(odom_msg)
 
+        if self.visualize_laser is True:
+            t = TransformStamped()
+            t.header.stamp = self.get_clock().now().to_msg()
+            t.header.frame_id = 'map'
+            t.child_frame_id = 'laser_model'
+            t.transform.translation.x = x
+            t.transform.translation.y = y
+            t.transform.translation.z = 0.0
+            t.transform.rotation.x = quat[0]
+            t.transform.rotation.y = quat[1]
+            t.transform.rotation.z = quat[2]
+            t.transform.rotation.w = quat[3]
+            self.tf_broadcaster.sendTransform(t)
+
+        ### Publishing path ###
+        if self.visualize_path is True:
+            current_time = odom_msg.header.stamp.sec + odom_msg.header.stamp.nanosec*10**-9
+            if(self.last_path_time is None or current_time > self.last_path_time + 1/3):
+                self.last_path_time = current_time
+                pose_stamped = PoseStamped()
+                pose_stamped.header = odom_msg.header
+                pose_stamped.pose = odom_msg.pose.pose
+                self.path.poses.append(pose_stamped)
+
+                self.path_pub.publish(self.path)
+
         ### Publishing particles ###
-        visual_particles = PoseArray()
-        visual_particles.header.stamp = self.get_clock().now().to_msg()
-        visual_particles.header.frame_id = "map"
+        if self.visualize_particles is True:
+            visual_particles = PoseArray()
+            visual_particles.header.stamp = self.get_clock().now().to_msg()
+            visual_particles.header.frame_id = "map"
 
-        visual_particles.poses = []
-        for particle in self.particles:
-            q = quaternion_from_euler(0, 0, particle[2])
-            quaternion_msg = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+            visual_particles.poses = []
+            for particle in self.particles:
+                q = quaternion_from_euler(0, 0, particle[2])
+                quaternion_msg = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
 
-            pose = Pose(
-                position=Point(x=particle[0], y=particle[1], z=0.0),
-                orientation=quaternion_msg
-            )
-            visual_particles.poses.append(pose)
+                pose = Pose(
+                    position=Point(x=particle[0], y=particle[1], z=0.0),
+                    orientation=quaternion_msg
+                )
+                visual_particles.poses.append(pose)
 
-        self.particle_pub.publish(visual_particles)
+            self.particle_pub.publish(visual_particles)
 
 
     def resample(self):

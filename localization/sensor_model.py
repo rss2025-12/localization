@@ -124,7 +124,7 @@ class SensorModel:
         return 0.0
 
     def p_max(self, z, d):
-        if (self.table_width - 1 - self.eps <= z) and (self.table_width - 1 >= z):
+        if (self.table_width - 1 - self.eps <= z <= self.table_width - 1):
             return 1/self.eps
         return 0.0
 

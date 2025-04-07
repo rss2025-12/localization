@@ -7,8 +7,9 @@ class MotionModel:
         # Precomputation here
 
         self.deterministic = node.get_parameter('deterministic').get_parameter_value().bool_value
-        self.sigma = 0.1
-        self.sigma_theta = 0.05
+        self.sigma_x = 0.3 # 0.3
+        self.sigma_y = 0.1 # 0.1
+        self.sigma_theta = 0.1 # 0.075
 
         ####################################
 
@@ -50,8 +51,8 @@ class MotionModel:
         def sample_odometry(odometry, num_particles):
             if self.deterministic:
                 return np.tile(odometry, (num_particles, 1))
-            dx = np.random.normal(odometry[0], self.sigma, size=num_particles)
-            dy = np.random.normal(odometry[1], self.sigma, size=num_particles)
+            dx = np.random.normal(odometry[0], self.sigma_x, size=num_particles)
+            dy = np.random.normal(odometry[1], self.sigma_y, size=num_particles)
             dtheta = np.random.normal(odometry[2], self.sigma_theta, size=num_particles)
             return np.column_stack((dx, dy, dtheta))
 
