@@ -89,6 +89,7 @@ class ParticleFilter(Node):
 
         self.motion_model = MotionModel(self)
         self.sensor_model = SensorModel(self)
+        self.is_free = self.sensor_model.is_free
 
         self.last_odom_time = None
         self.last_laser_time = None
@@ -164,12 +165,8 @@ class ParticleFilter(Node):
         Uses scan data to generate weights for the particles.
         Returns nothing.
         """
-
-        current_timestamp = laser.header.stamp.sec + laser.header.stamp.nanosec * 1e-9
-
-        if not self.initial_pose_set or (self.last_laser_time is not None and current_timestamp < self.last_laser_time + 1/self.sensor_freq):
+        if not self.initial_pose_set:
             return
-        self.last_laser_time = current_timestamp
 
         ### Downsizing laserscan to fit sensor_model scan ###
         desired_sample_num = self.sensor_model.num_beams_per_particle
@@ -278,13 +275,50 @@ class ParticleFilter(Node):
         particle_weights = self.particle_weights.copy()
         particle_weights = particle_weights / np.sum(particle_weights)
 
-        ### Resampling ###
-        particle_indices = np.arange(len(particle_weights))
-        choice_indices = np.random.choice(particle_indices, size=self.particle_count, p=particle_weights.reshape(-1), replace=True)
-        resampled_particles = particles[choice_indices, :]
-        resampled_weights = particle_weights[choice_indices] / sum(particle_weights[choice_indices])
+        # current_timestamp = laser.header.stamp.sec + laser.header.stamp.nanosec * 1e-9
 
-        return (resampled_particles, resampled_weights)
+        # if not self.initial_pose_set or (self.last_laser_time is not None and current_timestamp < self.last_laser_time + 1/self.sensor_freq):
+        #     return
+        # self.last_laser_time = current_timestamp
+
+        # Resample only if Neff is low
+        neff = 1.0 / np.sum(particle_weights**2)
+        if neff > 0.6 * self.particle_count: # Between 0.5 - 0.7
+            return particles, particle_weights
+
+        ### Low Variance Resampling ###
+        cumulative_weights = np.cumsum(particle_weights)
+        N = self.particle_count
+
+        # Randomly pick a starting point in the range [0, 1/N)
+        r = np.random.uniform(0, 1 / N)
+        indices = np.zeros(N, dtype=int)
+        i = 0
+        for j in range(N):
+            while cumulative_weights[i] < r + j / N:
+                i += 1
+            indices[j] = i
+
+        resampled_particles = particles[indices]
+        resampled_weights = particle_weights[indices]
+        resampled_weights = resampled_weights / np.sum(resampled_weights)
+
+        return resampled_particles, resampled_weights
+
+        # ### Resampling ###
+        # particle_indices = np.arange(len(particle_weights))
+        # choice_indices = np.random.choice(particle_indices, size=self.particle_count, p=particle_weights.reshape(-1), replace=True)
+        # resampled_particles = particles[choice_indices, :]
+        # # resampled_weights = particle_weights[choice_indices] / sum(particle_weights[choice_indices])
+        # resampled_weights = particle_weights[choice_indices]
+        # for i in range(len(resampled_particles)):
+        #     p = particles[i]
+        #     x,y = p[:2]
+        #     if self.is_free(x,y) == 0:
+        #         resampled_weights[i] = 0
+        # resampled_weights = resampled_weights / sum(resampled_weights)
+
+        # return (resampled_particles, resampled_weights)
 
 
 def main(args=None):

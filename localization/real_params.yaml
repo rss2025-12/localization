@@ -32,6 +32,6 @@ particle_filter:
     odom_invert: True
 
     # Frequency of the sensor model evaluating
-    sensor_model_frequency: 2.0
+    sensor_model_frequency: 20.0
 
     lidar_scale_to_map_scale: 1.0

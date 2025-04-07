@@ -61,12 +61,36 @@ class SensorModel:
 
         # Subscribe to the map
         self.map = None
+        self.mapinfo = None
         self.map_set = False
         self.map_subscriber = node.create_subscription(
             OccupancyGrid,
             self.map_topic,
             self.map_callback,
             1)
+    
+    def is_free(self, x_world, y_world):
+        if self.map is None:
+            self.get_logger().warn("Map not received yet.")
+            return False
+
+        # Extract info from map
+        origin = self.mapinfo.info.origin.position
+        resolution = self.mapinfo.info.resolution
+        width = self.mapinfo.info.width
+        height = self.mapinfo.info.height
+
+        # Convert (x, y) in world coords to (i, j) in map grid coords
+        i = int((x_world - origin.x) / resolution)
+        j = int((y_world - origin.y) / resolution)
+
+        # Check bounds
+        if 0 <= i < width and 0 <= j < height:
+            index = j * width + i
+            value = self.map[index]
+            return value == 0  # 0 = free, 100 = occupied, -1 = unknown
+
+        return -1
 
     def precompute_sensor_model(self):
         """
@@ -177,6 +201,7 @@ class SensorModel:
 
     def map_callback(self, map_msg):
         # Convert the map to a numpy array
+        self.mapinfo = map_msg
         self.map = np.array(map_msg.data, np.double) / 100.
         self.map = np.clip(self.map, 0, 1)
 
