@@ -85,7 +85,7 @@ class ParticleFilter(Node):
 
         # Visualize lidar data
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.visualize_laser = True
+        self.visualize_laser = False
 
         self.motion_model = MotionModel(self)
         self.sensor_model = SensorModel(self)
@@ -165,6 +165,8 @@ class ParticleFilter(Node):
         Uses scan data to generate weights for the particles.
         Returns nothing.
         """
+        if not self.initial_pose_set:
+            return
 
         ### Downsizing laserscan to fit sensor_model scan ###
         desired_sample_num = self.sensor_model.num_beams_per_particle
@@ -274,9 +276,9 @@ class ParticleFilter(Node):
         particle_weights = particle_weights / np.sum(particle_weights)
 
         ### Resample only if Neff is low ###
-        neff = 1.0 / np.sum(particle_weights**2)
-        if neff > 0.6 * self.num_particles: # Between 0.5 - 0.7
-            return self.particles, self.particle_weights
+        # neff = 1.0 / np.sum(particle_weights**2)
+        # if neff > 0.6 * self.particle_count: # Between 0.5 - 0.7
+        #     return self.particles, self.particle_weights
 
         ### Resampling ###
         particle_indices = np.arange(len(particle_weights))
