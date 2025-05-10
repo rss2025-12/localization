@@ -289,6 +289,7 @@ class ParticleFilter(Node):
         particle_weights = particle_weights / np.sum(particle_weights)
 
         ### Resample only if Neff is low ###
+
         neff = 1.0 / np.sum(particle_weights**2)
         if neff > 0.6 * self.particle_count: # Between 0.5 - 0.7
             return particles, particle_weights
