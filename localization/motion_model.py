@@ -7,7 +7,7 @@ class MotionModel:
         # Precomputation here
 
         self.deterministic = node.get_parameter('deterministic').get_parameter_value().bool_value
-        self.sigma_x = 0.1 # 0.3
+        self.sigma_x = 0.3 # 0.3
         self.sigma_y = 0.1 # 0.1
         self.sigma_theta = 0.05 # 0.075
 

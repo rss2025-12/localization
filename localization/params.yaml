@@ -26,6 +26,6 @@ particle_filter:
     deterministic: False
 
     # Invert odom data
-    joystick_invert: False
+    odom_invert: False
 
     lidar_scale_to_map_scale: 1.0

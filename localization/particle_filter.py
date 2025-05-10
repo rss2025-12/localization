@@ -11,7 +11,7 @@ from tf2_ros import TransformBroadcaster
 assert rclpy
 
 import numpy as np
-
+from threading import Lock
 
 class ParticleFilter(Node):
 
@@ -74,7 +74,7 @@ class ParticleFilter(Node):
 
         # Initialize the models
         self.particle_pub = self.create_publisher(PoseArray, "/debug_particles", 1)
-        self.visualize_particles = True
+        self.visualize_particles = False
 
         # Slime path
         self.path_pub = self.create_publisher(Path, "/odom_path", 1)
@@ -85,7 +85,7 @@ class ParticleFilter(Node):
 
         # Visualize lidar data
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.visualize_laser = True
+        self.visualize_laser = False
 
         self.motion_model = MotionModel(self)
         self.sensor_model = SensorModel(self)
@@ -96,6 +96,8 @@ class ParticleFilter(Node):
         self.last_path_time = None
         self.initial_pose_set = False
         self.get_logger().info("=============+READY+=============")
+
+        self.particle_lock = Lock()
 
         # Implement the MCL algorithm
         # using the sensor model and the motion model
@@ -156,8 +158,10 @@ class ParticleFilter(Node):
 
         odometry = np.array([x * dt, y * dt, theta * dt]) if not self.odom_invert else -np.array([x * dt, y * dt, theta * dt])
 
+        self.particle_lock.acquire()
         self.particles = self.motion_model.evaluate(self.particles, odometry)
         self.update_pose()
+        self.particle_lock.release()
 
 
     def laser_callback(self, laser):
@@ -165,6 +169,8 @@ class ParticleFilter(Node):
         Uses scan data to generate weights for the particles.
         Returns nothing.
         """
+        if not self.initial_pose_set:
+            return
 
         ### Downsizing laserscan to fit sensor_model scan ###
         desired_sample_num = self.sensor_model.num_beams_per_particle
@@ -179,9 +185,12 @@ class ParticleFilter(Node):
         )
 
         ### Updating particle weights ###
+        self.particle_lock.acquire()
         self.particle_weights = self.sensor_model.evaluate(self.particles, downsampled_scan)**(1/3)
         self.particles, self.particle_weights = self.resample()
         self.update_pose()
+        self.particle_lock.release()
+
 
 
     def update_pose(self):
@@ -197,6 +206,10 @@ class ParticleFilter(Node):
         ### Take mean and circular mean of measurements ###
         x = np.sum(self.particles[:, 0] * self.particle_weights)
         y = np.sum(self.particles[:, 1] * self.particle_weights)
+
+        # if(np.max(np.abs([x, y])) < 10**-10):
+        #     # self.get_logger().info(f'x, y flicker to 0 blocked: {x, y}')
+        #     return
 
         sin_sum = np.sum(np.sin(self.particles[:, 2]) * self.particle_weights)
         cos_sum = np.sum(np.cos(self.particles[:, 2]) * self.particle_weights)
@@ -266,6 +279,8 @@ class ParticleFilter(Node):
 
             self.particle_pub.publish(visual_particles)
 
+        self.updating = False
+
 
     def resample(self):
         ### Copying and normalizing particles ###
@@ -275,8 +290,8 @@ class ParticleFilter(Node):
 
         ### Resample only if Neff is low ###
         neff = 1.0 / np.sum(particle_weights**2)
-        if neff > 0.6 * self.num_particles: # Between 0.5 - 0.7
-            return self.particles, self.particle_weights
+        if neff > 0.6 * self.particle_count: # Between 0.5 - 0.7
+            return particles, particle_weights
 
         ### Resampling ###
         particle_indices = np.arange(len(particle_weights))
